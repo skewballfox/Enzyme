@@ -85,19 +85,19 @@ SmallVector<AffineMap> getIndexingMapsArray(enzyme::GenericAdjointOp &op) {
   return indexingMaps;
 }
 
-void processDims(OpOperand * input, linalg::LinalgOp & newOp, SmallVector<Value> &dims,
-                               OpBuilder &cacheBuilder, bool usesTensors){
+void processDims(OpOperand *input, linalg::LinalgOp &newOp,
+                 SmallVector<Value> &dims, OpBuilder &cacheBuilder,
+                 bool usesTensors) {
   ArrayRef<int64_t> shape;
-  if (!usesTensors){
+  if (!usesTensors) {
     shape = cast<MemRefType>(input->get().getType()).getShape();
   } else {
     shape = cast<TensorType>(input->get().getType()).getShape();
   }
 
   for (unsigned i = 0; i < shape.size(); i++) {
-    auto dimI =
-        cacheBuilder.create<arith::ConstantIndexOp>(newOp->getLoc(), i);
-    if (!usesTensors){
+    auto dimI = cacheBuilder.create<arith::ConstantIndexOp>(newOp->getLoc(), i);
+    if (!usesTensors) {
       auto dim = cacheBuilder.create<memref::DimOp>(newOp->getLoc(),
                                                     input->get(), dimI);
       dims.push_back(dim);
@@ -110,7 +110,7 @@ void processDims(OpOperand * input, linalg::LinalgOp & newOp, SmallVector<Value>
 }
 
 void collectDims(linalg::LinalgOp &newOp, SmallVector<Value> &dims,
-                               OpBuilder &cacheBuilder, bool usesTensors) {
+                 OpBuilder &cacheBuilder, bool usesTensors) {
   for (OpOperand *input : newOp.getDpsInputOperands()) {
     processDims(input, newOp, dims, cacheBuilder, usesTensors);
   }
@@ -120,10 +120,9 @@ void collectDims(linalg::LinalgOp &newOp, SmallVector<Value> &dims,
 }
 
 void processIterationDomains(AffineMap aMap, SmallVector<Value> dims,
-                                 OpBuilder & cacheBuilder,
-                                 linalg::LinalgOp & newOp,
-                                 SmallVector<Value> &iterationDomains,
-                                 SmallVector<int64_t> &shapes){
+                             OpBuilder &cacheBuilder, linalg::LinalgOp &newOp,
+                             SmallVector<Value> &iterationDomains,
+                             SmallVector<int64_t> &shapes) {
   for (unsigned int i = 0; i < aMap.getNumResults(); i++) {
     AffineMap subMap = aMap.getSubMap({i});
     Value domain = cacheBuilder.create<AffineApplyOp>(newOp->getLoc(), subMap,
@@ -134,14 +133,12 @@ void processIterationDomains(AffineMap aMap, SmallVector<Value> dims,
 }
 
 void prepareInputsAndOutputs(linalg::LinalgOp &linalgOp,
-                            MGradientUtilsReverse *gutils,
-                            OpBuilder &builder,
-                            Operation *op,
-                            SmallVector<Value> &inputs,
-                            SmallVector<Value> &outputs,
-                            SmallVector<AffineMap> &indexingMaps,
-                            bool usesTensors){
-  if (!usesTensors){
+                             MGradientUtilsReverse *gutils, OpBuilder &builder,
+                             Operation *op, SmallVector<Value> &inputs,
+                             SmallVector<Value> &outputs,
+                             SmallVector<AffineMap> &indexingMaps,
+                             bool usesTensors) {
+  if (!usesTensors) {
     for (OpOperand *output : linalgOp.getDpsInitOperands()) {
       if (!gutils->hasInvertPointer(output->get())) {
         continue;
@@ -172,18 +169,19 @@ void prepareInputsAndOutputs(linalg::LinalgOp &linalgOp,
     }
     indexingMaps.push_back(linalgOp.getMatchingIndexingMap(input));
     Value inp = gutils->invertPointerM(input->get(), builder);
-    if (!usesTensors){
+    if (!usesTensors) {
       Value view = invertMemref(inp, builder, linalgOp->getLoc());
       inputs.push_back(view);
     } else {
-      inputs.push_back(inp); //Just Push anything of the correct shape. The value wont be used.
+      inputs.push_back(inp); // Just Push anything of the correct shape. The
+                             // value wont be used.
     }
   }
 }
 
 // TODO this might mess up your cacheBuilder
 linalg::LinalgOp addResultToGenericOp(Value result, linalg::LinalgOp &newOp,
-                          OpBuilder &cacheBuilder) {
+                                      OpBuilder &cacheBuilder) {
   linalg::GenericOp genericOp = cast<linalg::GenericOp>(newOp);
   TypeRange newOpResultTypes = genericOp.getResultTypes();
   SmallVector<Type> newNewOpResultTypesVec = llvm::to_vector(newOpResultTypes);
@@ -194,9 +192,10 @@ linalg::LinalgOp addResultToGenericOp(Value result, linalg::LinalgOp &newOp,
 
   cacheBuilder.setInsertionPoint(newOp);
   linalg::GenericOp newGenericOp = cacheBuilder.create<linalg::GenericOp>(
-      newOp->getLoc(), newNewOpResultTypesVec, inputs, outputs, genericOp.getIndexingMaps(),
-      genericOp.getIteratorTypes(), genericOp.getDocAttr(), genericOp.getLibraryCallAttr());
-  
+      newOp->getLoc(), newNewOpResultTypesVec, inputs, outputs,
+      genericOp.getIndexingMaps(), genericOp.getIteratorTypes(),
+      genericOp.getDocAttr(), genericOp.getLibraryCallAttr());
+
   newGenericOp.getRegion().takeBody(genericOp.getRegion());
 
   for (int i = 0; i < genericOp->getNumResults(); i++) {
@@ -204,10 +203,9 @@ linalg::LinalgOp addResultToGenericOp(Value result, linalg::LinalgOp &newOp,
   }
 
   newOp.erase();
-  
+
   return newGenericOp;
 }
-
 
 template <typename T_>
 struct GenericOpInterfaceReverse
@@ -245,11 +243,13 @@ struct GenericOpInterfaceReverse
     AffineMap aMap = newOp.getShapesToLoopsMap();
     SmallVector<Value> iterationDomains;
     SmallVector<int64_t> shapes;
-    processIterationDomains(aMap, dims, cacheBuilder, newOp, iterationDomains, shapes);
+    processIterationDomains(aMap, dims, cacheBuilder, newOp, iterationDomains,
+                            shapes);
 
     SmallVector<Value> inputs, outputs;
     SmallVector<AffineMap> indexingMaps;
-    prepareInputsAndOutputs(linalgOp, gutils, builder, op, inputs, outputs, indexingMaps, usesTensors);
+    prepareInputsAndOutputs(linalgOp, gutils, builder, op, inputs, outputs,
+                            indexingMaps, usesTensors);
 
     SmallVector<utils::IteratorType> iteratorTypes{
         linalgOp.getNumLoops(), utils::IteratorType::parallel};
@@ -260,30 +260,34 @@ struct GenericOpInterfaceReverse
             iteratorTypes, [&](utils::IteratorType iter) -> mlir::Attribute {
               return linalg::IteratorTypeAttr::get(builder.getContext(), iter);
             })));
-    
+
     SmallVector<Type> resultTypes;
-    if (usesTensors){
-      for (auto inp : inputs){
+    if (usesTensors) {
+      for (auto inp : inputs) {
         resultTypes.push_back(cast<TensorType>(inp.getType()));
       }
     }
 
     auto adjoint = builder.create<enzyme::GenericAdjointOp>(
-        op->getLoc(), TypeRange(resultTypes), ValueRange(outputs), ValueRange(inputs),
-        indexingMapsArrayAttr, iteratorTypesArrayAttr, StringAttr(),
-        StringAttr());
+        op->getLoc(), TypeRange(resultTypes), ValueRange(outputs),
+        ValueRange(inputs), indexingMapsArrayAttr, iteratorTypesArrayAttr,
+        StringAttr(), StringAttr());
 
-    if (usesTensors){
+    if (usesTensors) {
       for (unsigned i = 0; i < adjoint->getNumResults(); i++) {
         Value currentInput = linalgOp.getDpsInputOperand(i)->get();
-        if (! gutils->hasInvertPointer(currentInput)){
-          gutils->mapInvertPointer(linalgOp.getDpsInputOperand(i)->get(), adjoint->getResult(i), builder);
-        }
-        else{
-        Value grad = gutils->invertPointerM(linalgOp.getDpsInputOperand(i)->get(), builder);
-        Value addedGradient = cast<AutoDiffTypeInterface>(currentInput.getType()).createAddOp(
-            builder, op->getLoc(), adjoint->getResult(i), grad);
-        gutils->mapInvertPointer(linalgOp.getDpsInputOperand(i)->get(), addedGradient, builder);
+        if (!gutils->hasInvertPointer(currentInput)) {
+          gutils->mapInvertPointer(linalgOp.getDpsInputOperand(i)->get(),
+                                   adjoint->getResult(i), builder);
+        } else {
+          Value grad = gutils->invertPointerM(
+              linalgOp.getDpsInputOperand(i)->get(), builder);
+          Value addedGradient =
+              cast<AutoDiffTypeInterface>(currentInput.getType())
+                  .createAddOp(builder, op->getLoc(), adjoint->getResult(i),
+                               grad);
+          gutils->mapInvertPointer(linalgOp.getDpsInputOperand(i)->get(),
+                                   addedGradient, builder);
         }
       }
     }
@@ -344,15 +348,15 @@ struct GenericOpInterfaceReverse
 
       Type ct = cacheArg.getType();
       Value cache;
-      if (!usesTensors){
+      if (!usesTensors) {
         Type type = MemRefType::get(shapes, ct);
         auto alloc = cacheBuilder.create<memref::AllocOp>(
             op->getLoc(), type, ValueRange(iterationDomains));
         cache = gutils->initAndPushCache(alloc, cacheBuilder);
 
-        alloc->setAttr(
-            alloc.getOperandSegmentSizesAttrName(),
-            cacheBuilder.getDenseI32ArrayAttr({iterationDomains.size(), 0}));
+        alloc->setAttr(alloc.getOperandSegmentSizesAttrName(),
+                       cacheBuilder.getDenseI32ArrayAttr(
+                           {static_cast<int32_t>(iterationDomains.size()), 0}));
 
         cast<linalg::GenericOp>(newOp).getOutputsMutable().append(
             ValueRange({alloc}));
@@ -360,11 +364,13 @@ struct GenericOpInterfaceReverse
         Type type = RankedTensorType::get(shapes, ct);
         auto empty = cacheBuilder.create<tensor::EmptyOp>(
             op->getLoc(), type, ValueRange(iterationDomains));
-        auto genericOpOutputsMutable = cast<linalg::GenericOp>(newOp).getOutputsMutable();
+        auto genericOpOutputsMutable =
+            cast<linalg::GenericOp>(newOp).getOutputsMutable();
         genericOpOutputsMutable.append(ValueRange({empty}));
         newOp = addResultToGenericOp(empty, newOp, cacheBuilder);
         cacheBuilder.setInsertionPointAfter(newOp);
-        cache = gutils->initAndPushCache(newOp->getResult(newOp->getNumResults()-1), cacheBuilder);
+        cache = gutils->initAndPushCache(
+            newOp->getResult(newOp->getNumResults() - 1), cacheBuilder);
         cacheBuilder.setInsertionPoint(newOp);
       }
 
@@ -373,7 +379,7 @@ struct GenericOpInterfaceReverse
 
       builderAdd.setInsertionPoint(adjoint);
       Value retrievedValue = gutils->popCache(cache, builderAdd);
-      if (!usesTensors){
+      if (!usesTensors) {
         retrievedValue = invertMemref(retrievedValue, builderAdd, op->getLoc());
       } else {
         retrievedValue = invertTensor(retrievedValue, builderAdd, op->getLoc());
@@ -384,7 +390,7 @@ struct GenericOpInterfaceReverse
           AffineMap::getMultiDimIdentityMap(iterationDomains.size(),
                                             builderAdd.getContext()));
     }
-    
+
     SmallVector<Attribute> indexingMapsAttr;
     SmallVector<Attribute> indexingMapsAttrAdjoint;
     for (auto &map : newIndexingMaps) {

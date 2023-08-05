@@ -6,6 +6,7 @@ add_mlir_library(MLIREnzymeImplementations
   LinalgAutoDiffOpInterfaceImpl.cpp
   BuiltinAutoDiffTypeInterfaceImpl.cpp
   SCFAutoDiffOpInterfaceImpl.cpp
+  BufferizableOpInterfaceImpl.cpp
 
   DEPENDS
   MLIRAutoDiffOpInterfaceIncGen
