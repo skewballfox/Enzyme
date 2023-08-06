@@ -24,8 +24,8 @@ module {
 // Make sure the right values are being cached in the primal
 // CHECK:        %[[one:.+]] = arith.constant 1.0
 // CHECK:        scf.for %[[iv:.+]] = %c0 to %c10 step %c1 iter_args(%[[r_it:.+]] = %[[one]])
-// CHECK-NEXT:       "enzyme.push"(%[[xcache:.+]], %[[x]])
-// CHECK-NEXT:       "enzyme.push"(%[[rcache:.+]], %[[r_it]])
+// CHECK-NEXT:       enzyme.push %[[x]], %[[xcache:[0-9]+]]
+// CHECK-NEXT:       enzyme.push %[[r_it]], %[[rcache:[0-9]+]]
 
 // Ensure the right value is yielded in the adjoint
 // CHECK:        "enzyme.set"(%[[rshadow:.+]], %[[dr]])
