@@ -54,8 +54,8 @@ struct ShadowedGradientToCachePass
         if (auto type =
                 dyn_cast<enzyme::CacheType>(clearOp.getCache().getType())) {
           OpBuilder builder(op);
-          Value buffer = builder.create<PopOp>(op->getLoc(), type.getType(),
-                                               clearOp.getCache());
+          Value buffer = builder.create<PopOp>(
+              op->getLoc(), type.getElementType(), clearOp.getCache());
 
           clearOp->erase();
         }

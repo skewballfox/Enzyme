@@ -55,11 +55,12 @@ struct SimplifyMemrefCachePass
           assert(linalgOp.getRegion().getArgument(outputIndex).use_empty());
 
           linalgOp.getRegion().eraseArgument(outputIndex);
-          linalgOp.getRegion().insertArgument(outputIndex, c2.getType(),
+          linalgOp.getRegion().insertArgument(outputIndex, c2.getElementType(),
                                               output.value().getLoc());
 
-          Value cache = linalgOp.getRegion().front().getTerminator()->getOperand(
-              (unsigned)output.index());
+          Value cache =
+              linalgOp.getRegion().front().getTerminator()->getOperand(
+                  (unsigned)output.index());
           for (auto user : cache.getUsers()) {
             if (isa<enzyme::PopOp>(user)) {
               llvm_unreachable("PopOp should not be used in forward pass");
@@ -77,12 +78,11 @@ struct SimplifyMemrefCachePass
       }
       allocOp.replaceAllUsesWith((Value)newAllocOp);
       allocOp.erase();
-    }
-    else if (genericOp){
+    } else if (genericOp) {
       v.setType(newType);
       int outIndex = -1;
-      for (auto &&output : llvm::enumerate(genericOp->getOpResults())){
-        if (output.value() == v){
+      for (auto &&output : llvm::enumerate(genericOp->getOpResults())) {
+        if (output.value() == v) {
           outIndex = (int)output.index();
           break;
         }
@@ -90,12 +90,12 @@ struct SimplifyMemrefCachePass
       assert(outIndex != -1);
       genericOp.getDpsInitOperand(outIndex)->get().setType(newType);
 
-      unsigned outputIndex =
-              genericOp.getNumDpsInputs() + (unsigned)outIndex;
+      unsigned outputIndex = genericOp.getNumDpsInputs() + (unsigned)outIndex;
 
       genericOp.getRegion().eraseArgument(outputIndex);
-      genericOp.getRegion().insertArgument(outputIndex, c2.getType(),
-                                              genericOp.getDpsInitOperand(outIndex)->get().getLoc());
+      genericOp.getRegion().insertArgument(
+          outputIndex, c2.getElementType(),
+          genericOp.getDpsInitOperand(outIndex)->get().getLoc());
 
       Value cache = genericOp.getRegion().front().getTerminator()->getOperand(
           (unsigned)outIndex);
@@ -138,7 +138,7 @@ struct SimplifyMemrefCachePass
           }
           unsigned inputIndex = (unsigned)input.index();
           Value inputCacheSSA = linalgOp.getRegion().insertArgument(
-              inputIndex, c2.getType(), input.value().getLoc());
+              inputIndex, c2.getElementType(), input.value().getLoc());
           Value oldArg = linalgOp.getRegion().getArgument(inputIndex + 1);
           for (auto user : oldArg.getUsers()) {
             auto popOp = dyn_cast<enzyme::PopOp>(user);
@@ -154,7 +154,7 @@ struct SimplifyMemrefCachePass
         }
       }
 
-      if (subviewOp){
+      if (subviewOp) {
         // Replace Subview Op
         OpBuilder subviewBuilder(subviewOp);
         auto newSubviewOp = subviewBuilder.create<memref::SubViewOp>(
@@ -162,11 +162,13 @@ struct SimplifyMemrefCachePass
             subviewOp.getSizes(), subviewOp.getStrides());
         subviewOp.replaceAllUsesWith((Value)newSubviewOp);
         subviewOp.erase();
-      }
-      else if(extractSliceOp){
-        //Replace extractSliceOp
+      } else if (extractSliceOp) {
+        // Replace extractSliceOp
         OpBuilder extractSliceBuilder(extractSliceOp);
-        auto newExtractSliceOp = extractSliceBuilder.create<tensor::ExtractSliceOp>(extractSliceOp.getLoc(), newPopOp, extractSliceOp.getOffsets(), extractSliceOp.getSizes(), extractSliceOp.getStrides());
+        auto newExtractSliceOp =
+            extractSliceBuilder.create<tensor::ExtractSliceOp>(
+                extractSliceOp.getLoc(), newPopOp, extractSliceOp.getOffsets(),
+                extractSliceOp.getSizes(), extractSliceOp.getStrides());
         extractSliceOp.replaceAllUsesWith((Value)newExtractSliceOp);
         extractSliceOp.erase();
       }
@@ -187,15 +189,15 @@ struct SimplifyMemrefCachePass
       if (!c1) {
         return;
       }
-      auto memref = dyn_cast<MemRefType>(c1.getType());
-      auto rankedTensor = dyn_cast<RankedTensorType>(c1.getType());
+      auto memref = dyn_cast<MemRefType>(c1.getElementType());
+      auto rankedTensor = dyn_cast<RankedTensorType>(c1.getElementType());
       if (memref) {
         auto c2 = dyn_cast<enzyme::CacheType>(memref.getElementType());
         if (!c2) {
           return;
         }
         mlir::MemRefType::Builder memrefTypeBuilder(memref);
-        memrefTypeBuilder.setElementType(c2.getType());
+        memrefTypeBuilder.setElementType(c2.getElementType());
         Type newType = memrefTypeBuilder;
         Type newCacheType = enzyme::CacheType::get(context, newType);
         for (auto user : op->getUsers()) {
@@ -209,19 +211,19 @@ struct SimplifyMemrefCachePass
         }
 
         OpBuilder builder(op);
-        auto newInit = builder.create<enzyme::InitOp>(op->getLoc(), newCacheType);
+        auto newInit =
+            builder.create<enzyme::InitOp>(op->getLoc(), newCacheType);
         op->replaceAllUsesWith(newInit);
 
         op->erase();
         return;
-      }
-      else if(rankedTensor){
+      } else if (rankedTensor) {
         auto c2 = dyn_cast<enzyme::CacheType>(rankedTensor.getElementType());
         if (!c2) {
           return;
         }
         mlir::RankedTensorType::Builder tensorTypeBuilder(rankedTensor);
-        tensorTypeBuilder.setElementType(c2.getType());
+        tensorTypeBuilder.setElementType(c2.getElementType());
         Type newType = tensorTypeBuilder;
         Type newCacheType = enzyme::CacheType::get(context, newType);
         for (auto user : op->getUsers()) {
@@ -235,7 +237,8 @@ struct SimplifyMemrefCachePass
         }
 
         OpBuilder builder(op);
-        auto newInit = builder.create<enzyme::InitOp>(op->getLoc(), newCacheType);
+        auto newInit =
+            builder.create<enzyme::InitOp>(op->getLoc(), newCacheType);
         op->replaceAllUsesWith(newInit);
 
         op->erase();

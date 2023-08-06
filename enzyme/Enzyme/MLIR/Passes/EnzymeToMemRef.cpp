@@ -18,8 +18,8 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -212,7 +212,7 @@ struct LoweredCache {
     return LoweredCache{.elements = unpackedCache.getResult(0),
                         .size = unpackedCache.getResult(1),
                         .capacity = unpackedCache.getResult(2),
-                        .elementType = cacheType.getType()};
+                        .elementType = cacheType.getElementType()};
   }
 };
 
@@ -375,27 +375,28 @@ struct EnzymeToMemRefPass
     RewritePatternSet patterns(context);
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) -> llvm::Optional<Type> {
-      if (type.isIntOrIndexOrFloat() || type.isa<MemRefType>() || type.isa<TensorType>())
+      if (type.isIntOrIndexOrFloat() || type.isa<MemRefType>() ||
+          type.isa<TensorType>())
         return type;
       return {};
     });
     typeConverter.addConversion(
         [](enzyme::GradientType type) -> llvm::Optional<Type> {
-          return MemRefType::get({}, type.getBasetype());
+          return MemRefType::get({}, type.getBaseType());
         });
-    typeConverter.addConversion(
-        [](enzyme::CacheType type, SmallVectorImpl<Type> &resultTypes) {
-          // Data
-          resultTypes.push_back(MemRefType::get(
-              {}, MemRefType::get({ShapedType::kDynamic}, type.getType())));
-          auto indexMemRefType =
-              MemRefType::get({}, IndexType::get(type.getContext()));
-          // Size
-          resultTypes.push_back(indexMemRefType);
-          // Capacity
-          resultTypes.push_back(indexMemRefType);
-          return success();
-        });
+    typeConverter.addConversion([](enzyme::CacheType type,
+                                   SmallVectorImpl<Type> &resultTypes) {
+      // Data
+      resultTypes.push_back(MemRefType::get(
+          {}, MemRefType::get({ShapedType::kDynamic}, type.getElementType())));
+      auto indexMemRefType =
+          MemRefType::get({}, IndexType::get(type.getContext()));
+      // Size
+      resultTypes.push_back(indexMemRefType);
+      // Capacity
+      resultTypes.push_back(indexMemRefType);
+      return success();
+    });
 
     patterns.add<InitOpConversion>(typeConverter, context);
     patterns.add<PushOpConversion>(typeConverter, context);

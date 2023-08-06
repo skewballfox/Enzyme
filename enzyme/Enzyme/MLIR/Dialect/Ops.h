@@ -18,10 +18,10 @@
 
 #include "mlir/IR/DialectImplementation.h"
 
-#define GET_OP_CLASSES
-#include "Dialect/EnzymeOps.h.inc"
 #define GET_TYPEDEF_CLASSES
 #include "Dialect/EnzymeOpsTypes.h.inc"
+#define GET_OP_CLASSES
+#include "Dialect/EnzymeOps.h.inc"
 // #include "Dialect/EnzymeTypes.h.inc"
 
 #include "Dialect/EnzymeEnums.h.inc"

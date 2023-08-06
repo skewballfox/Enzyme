@@ -104,7 +104,7 @@ Value MGradientUtilsReverse::initAndPushCache(Value v, OpBuilder &builder) {
 
 Value MGradientUtilsReverse::popCache(Value cache, OpBuilder &builder) {
   return builder.create<enzyme::PopOp>(
-      cache.getLoc(), cast<enzyme::CacheType>(cache.getType()).getType(),
+      cache.getLoc(), cast<enzyme::CacheType>(cache.getType()).getElementType(),
       cache);
 }
 
@@ -212,7 +212,7 @@ Value mlir::enzyme::MGradientUtilsReverse::invertPointerM(Value v,
     Type type = gradient.getType();
 
     if (GradientType gType = dyn_cast<GradientType>(type)) {
-      Value ret = builder.create<enzyme::GetOp>(v.getLoc(), gType.getBasetype(),
+      Value ret = builder.create<enzyme::GetOp>(v.getLoc(), gType.getBaseType(),
                                                 gradient);
       return ret;
     } else {
@@ -269,7 +269,7 @@ void mlir::enzyme::MGradientUtilsReverse::clearValue(mlir::Value v,
   if (invertedPointersGlobal.contains(v)) {
     if (!onlyUsedInParentBlock(v)) { // TODO is this necessary?
       Value gradient = invertedPointersGlobal.lookupOrNull(v);
-      Type type = cast<GradientType>(gradient.getType()).getBasetype();
+      Type type = cast<GradientType>(gradient.getType()).getBaseType();
       if (auto iface = dyn_cast<AutoDiffTypeInterface>(type)) {
         Value zero = iface.createNullValue(builder, v.getLoc());
         builder.create<enzyme::SetOp>(v.getLoc(), gradient, zero);
@@ -307,8 +307,9 @@ void MGradientUtilsReverse::initInitializationBlock(
       llvm_unreachable(
           "Type does not have an associated AutoDiffTypeInterface");
     }
-    //Value zero = iface.createNullValue(initializationBuilder, val.getLoc());
-    Value zero = iface.createNullValueReverse(initializationBuilder, val, val.getDefiningOp(), this);
+    // Value zero = iface.createNullValue(initializationBuilder, val.getLoc());
+    Value zero = iface.createNullValueReverse(initializationBuilder, val,
+                                              val.getDefiningOp(), this);
     mapInvertPointer(val, zero, initializationBuilder);
   }
   for (auto const &x : invertedPointers_.getValueMap()) {

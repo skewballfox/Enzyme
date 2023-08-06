@@ -12,6 +12,7 @@
 #define ENZYME_OPS
 
 include "Dialect.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/EnumAttr.td"
@@ -71,15 +72,29 @@ def AutoDiffOp : Enzyme_Op<"autodiff",
   }];
 }
 
-def PushOp : Enzyme_Op<"push"> {
+def Cache : Enzyme_Type<"Cache"> {
+  let summary = "Cache for reverse pass";
+  let description = [{
+    "Cache for reverse pass"
+  }];
+  let parameters = (ins "Type":$elementType);
+  let mnemonic = "Cache";
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
+def PushOp : Enzyme_Op<"push",
+    [TypesMatchWith<"type of 'value' matches element type of 'cache'",
+                    "cache", "value",
+                    "$_self.cast<CacheType>().getElementType()">]> {
   let summary = "Push value to cache or ShadowedGradient";
-  let arguments = (ins AnyType : $cache, AnyType : $value);
-  let results = (outs );
+  let arguments = (ins Cache:$cache, AnyType:$value);
+
+  let assemblyFormat = [{ $value `,` $cache attr-dict `:` type($cache) }];
 }
 
 def PopOp : Enzyme_Op<"pop"> {
   let summary = "Retrieve information for the reverse mode pass.";
-  let arguments = (ins AnyType : $cache);
+  let arguments = (ins Cache:$cache);
   let results = (outs AnyType:$output);
 }
 
@@ -91,18 +106,9 @@ def ClearOp : Enzyme_Op<"clear"> {
 
 def InitOp : Enzyme_Op<"init"> {
   let summary = "Creat enzyme.gradient and enzyme.cache";
-  let arguments = (ins );
-  let results = (outs AnyType);
-}
+  let results = (outs AnyType:$result);
 
-def Cache : Enzyme_Type<"Cache"> {
-  let summary = "Cache for reverse pass";
-  let description = [{
-    "Cache for reverse pass"
-  }];
-  let parameters = (ins "Type":$type);
-  let mnemonic = "Cache";
-  let assemblyFormat = "`<` $type `>`";
+  let assemblyFormat = [{ attr-dict `:` type($result) }];
 }
 
 def SetOp : Enzyme_Op<"set"> {
@@ -122,9 +128,9 @@ def Gradient : Enzyme_Type<"Gradient"> {
   let description = [{
     "Cache for reverse pass"
   }];
-  let parameters = (ins "Type":$basetype);
+  let parameters = (ins "Type":$baseType);
   let mnemonic = "Gradient";
-  let assemblyFormat = "`<` $basetype `>`";
+  let assemblyFormat = "`<` $baseType `>`";
 }
 
 def ShadowedGradient : Enzyme_Type<"ShadowedGradient"> {
