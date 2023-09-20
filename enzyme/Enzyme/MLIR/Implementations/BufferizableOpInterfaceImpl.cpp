@@ -87,8 +87,7 @@ struct SetOpInterface
       return failure();
     }
 
-    Type baseType =
-        cast<enzyme::GradientType>(setOp.getGradient().getType()).getBaseType();
+    Type baseType = setOp.getGradient().getType().getBaseType();
     Type shadowType =
         getMemRefTypeWithStaticIdentityLayout(cast<TensorType>(baseType));
     Value shadow = rewriter
@@ -99,19 +98,6 @@ struct SetOpInterface
     return success();
   }
 };
-
-Value getBufferizedCache(TypedValue<enzyme::CacheType> cache,
-                         OpBuilder &builder, Location loc) {
-  Type elementType = cache.getType().getElementType();
-  Type bufferizedElementType =
-      getMemRefTypeWithFullyDynamicLayout(cast<TensorType>(elementType));
-  Type bufferizedCacheType =
-      enzyme::CacheType::get(builder.getContext(), bufferizedElementType);
-
-  return builder
-      .create<UnrealizedConversionCastOp>(loc, bufferizedCacheType, cache)
-      .getResult(0);
-}
 
 // Caches of tensors are left as-is and handled by the enzyme-to-memref pass.
 // Only tensor operands and results are converted.
@@ -143,9 +129,8 @@ struct PushOpInterface
     if (failed(bufferValue)) {
       return failure();
     }
-    Value cache =
-        getBufferizedCache(pushOp.getCache(), rewriter, pushOp.getLoc());
-    rewriter.replaceOpWithNewOp<enzyme::PushOp>(op, cache, *bufferValue);
+    rewriter.replaceOpWithNewOp<enzyme::PushOp>(op, pushOp.getCache(),
+                                                *bufferValue);
     return success();
   }
 };
@@ -173,10 +158,8 @@ struct PopOpInterface
     auto popOp = cast<enzyme::PopOp>(op);
 
     Type resultType = getMemRefType(popOp.getResult(), options);
-    Value cache =
-        getBufferizedCache(popOp.getCache(), rewriter, popOp.getLoc());
-    auto bufferPop =
-        rewriter.create<enzyme::PopOp>(op->getLoc(), resultType, cache);
+    auto bufferPop = rewriter.create<enzyme::PopOp>(op->getLoc(), resultType,
+                                                    popOp.getCache());
     rewriter.replaceOpWithNewOp<bufferization::ToTensorOp>(op, bufferPop);
     return success();
   }

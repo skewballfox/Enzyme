@@ -82,20 +82,28 @@ def Cache : Enzyme_Type<"Cache"> {
   let assemblyFormat = "`<` $elementType `>`";
 }
 
-def PushOp : Enzyme_Op<"push",
-    [TypesMatchWith<"type of 'value' matches element type of 'cache'",
-                    "cache", "value",
-                    "$_self.cast<CacheType>().getElementType()">]> {
-  let summary = "Push value to cache or ShadowedGradient";
-  let arguments = (ins Cache:$cache, AnyType:$value);
+def ShadowedGradient : Enzyme_Type<"ShadowedGradient"> {
+  let summary = "Stores gradients which need to be initialized with shadow values from the forward pass.";
+  let description = [{
+    "Cache for reverse pass"
+  }];
+  let parameters = (ins "Type":$basetype);
+  let mnemonic = "ShadowedGradient";
+  let assemblyFormat = "`<` $basetype `>`";
+}
 
-  let assemblyFormat = [{ $value `,` $cache attr-dict `:` type($cache) }];
+def PushOp : Enzyme_Op<"push"> {
+  let summary = "Push value to cache or ShadowedGradient";
+  let arguments = (ins AnyTypeOf<[Cache, ShadowedGradient]>:$cache, AnyType:$value);
+
+  let assemblyFormat = [{ $value `,` $cache attr-dict `:` type($value) `->` type($cache) }];
 }
 
 def PopOp : Enzyme_Op<"pop"> {
   let summary = "Retrieve information for the reverse mode pass.";
-  let arguments = (ins Cache:$cache);
-  let results = (outs AnyType:$output);
+  let arguments = (ins AnyTypeOf<[Cache, ShadowedGradient]>:$cache);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{ $cache attr-dict `:` type($cache) `->` type($result) }];
 }
 
 def ClearOp : Enzyme_Op<"clear"> {
@@ -111,18 +119,6 @@ def InitOp : Enzyme_Op<"init"> {
   let assemblyFormat = [{ attr-dict `:` type($result) }];
 }
 
-def SetOp : Enzyme_Op<"set"> {
-  let summary = "Write to gradient";
-  let arguments = (ins AnyType : $gradient, AnyType : $value);
-  let results = (outs );
-}
-
-def GetOp : Enzyme_Op<"get"> {
-  let summary = "Load value of gradient";
-  let arguments = (ins AnyType : $gradient);
-  let results = (outs AnyType);
-}
-
 def Gradient : Enzyme_Type<"Gradient"> {
   let summary = "Stores gradient if it cant be stroed in a value.";
   let description = [{
@@ -133,14 +129,23 @@ def Gradient : Enzyme_Type<"Gradient"> {
   let assemblyFormat = "`<` $baseType `>`";
 }
 
-def ShadowedGradient : Enzyme_Type<"ShadowedGradient"> {
-  let summary = "Stores gradients which need to be initialized with shadow values from the forward pass.";
-  let description = [{
-    "Cache for reverse pass"
-  }];
-  let parameters = (ins "Type":$basetype);
-  let mnemonic = "ShadowedGradient";
-  let assemblyFormat = "`<` $basetype `>`";
+def SetOp : Enzyme_Op<"set",
+     [TypesMatchWith<"result type matches element type of 'gradient'",
+                     "gradient", "value",
+                     "$_self.cast<GradientType>().getBaseType()">]> {
+  let summary = "Write to gradient";
+  let arguments = (ins Gradient:$gradient, AnyType:$value);
+  let assemblyFormat = [{ $value `,` $gradient attr-dict `:` type($gradient) }];
+}
+
+def GetOp : Enzyme_Op<"get",
+     [TypesMatchWith<"result type matches element type of 'gradient'",
+                     "gradient", "result",
+                     "$_self.cast<GradientType>().getBaseType()">]> {
+  let summary = "Load value of gradient";
+  let arguments = (ins Gradient:$gradient);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{ $gradient attr-dict `:` type($gradient) }];
 }
 
 def AddToOp : Enzyme_Op<"addTo", [Pure, Terminator, ReturnLike]>,

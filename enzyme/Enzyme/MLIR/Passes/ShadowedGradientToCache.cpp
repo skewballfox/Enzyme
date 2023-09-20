@@ -49,8 +49,7 @@ struct ShadowedGradientToCachePass
           initOp.replaceAllUsesWith(buffer);
           initOp->erase();
         }
-      }
-      if (auto clearOp = dyn_cast<enzyme::ClearOp>(op)) {
+      } else if (auto clearOp = dyn_cast<enzyme::ClearOp>(op)) {
         if (auto type =
                 dyn_cast<enzyme::CacheType>(clearOp.getCache().getType())) {
           OpBuilder builder(op);

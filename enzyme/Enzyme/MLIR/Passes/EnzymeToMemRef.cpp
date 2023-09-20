@@ -15,6 +15,7 @@
 #include "PassDetails.h"
 #include "Passes/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -209,10 +210,11 @@ struct LoweredCache {
     }
     auto unpackedCache =
         b.create<UnrealizedConversionCastOp>(loc, resultTypes, enzymeCache);
-    return LoweredCache{.elements = unpackedCache.getResult(0),
-                        .size = unpackedCache.getResult(1),
-                        .capacity = unpackedCache.getResult(2),
-                        .elementType = cacheType.getElementType()};
+    return LoweredCache{
+        .elements = unpackedCache.getResult(0),
+        .size = unpackedCache.getResult(1),
+        .capacity = unpackedCache.getResult(2),
+        .elementType = typeConverter->convertType(cacheType.getElementType())};
   }
 };
 
@@ -288,7 +290,16 @@ struct PushOpConversion : public OpConversionPattern<enzyme::PushOp> {
 
     FlatSymbolRefAttr pushFn = loweredCache.value().getOrInsertPushFunction(
         loc, op->getParentOfType<ModuleOp>(), rewriter);
-    loweredCache.value().emitPush(loc, op.getValue(), rewriter, pushFn);
+    Value pushValue = op.getValue();
+    if (isa<TensorType>(pushValue.getType())) {
+      bufferization::BufferizationOptions options;
+      auto bufferValue = bufferization::getBuffer(rewriter, pushValue, options);
+      if (failed(bufferValue))
+        return failure();
+
+      pushValue = *bufferValue;
+    }
+    loweredCache.value().emitPush(loc, pushValue, rewriter, pushFn);
     rewriter.eraseOp(op);
     return success();
   }
@@ -375,20 +386,23 @@ struct EnzymeToMemRefPass
     RewritePatternSet patterns(context);
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) -> llvm::Optional<Type> {
-      if (type.isIntOrIndexOrFloat() || type.isa<MemRefType>() ||
-          type.isa<TensorType>())
+      if (type.isIntOrIndexOrFloat() || type.isa<MemRefType>())
         return type;
+      if (auto tensorType = dyn_cast<TensorType>(type))
+        return bufferization::getMemRefTypeWithFullyDynamicLayout(tensorType);
       return {};
     });
     typeConverter.addConversion(
         [](enzyme::GradientType type) -> llvm::Optional<Type> {
           return MemRefType::get({}, type.getBaseType());
         });
-    typeConverter.addConversion([](enzyme::CacheType type,
-                                   SmallVectorImpl<Type> &resultTypes) {
+    typeConverter.addConversion([&](enzyme::CacheType type,
+                                    SmallVectorImpl<Type> &resultTypes) {
       // Data
       resultTypes.push_back(MemRefType::get(
-          {}, MemRefType::get({ShapedType::kDynamic}, type.getElementType())));
+          {},
+          MemRefType::get({ShapedType::kDynamic},
+                          typeConverter.convertType(type.getElementType()))));
       auto indexMemRefType =
           MemRefType::get({}, IndexType::get(type.getContext()));
       // Size
