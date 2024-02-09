@@ -80,6 +80,7 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
       if (op.hasTrait<OpTrait::ReturnLike>()) {
         auto *p2sets = solver.lookupState<enzyme::PointsToSets>(&op);
         node->setAttr("p2psummary", p2sets->serialize(op.getContext()));
+        errs() << "[ata] p2p summary: " << *p2sets << "\n";
       }
     }
   }

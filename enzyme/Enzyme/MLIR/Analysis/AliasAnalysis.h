@@ -367,6 +367,14 @@ private:
                 ArrayRef<const AliasClassLattice *> operands,
                 ArrayRef<AliasClassLattice *> results);
 
+  // Create a pseudo alias class when loading from a function argument where we
+  // don't know what it points to. The pseudo class indicates that it points to
+  // _something_ and is expected to be unified with a concrete alias class when
+  // the function summaries are used at this function's call sites.
+  void createImplicitArgDereference(Operation *op, AliasClassLattice *source,
+                                    DistinctAttr srcClass,
+                                    AliasClassLattice *result);
+
   /// A special alias class to denote unannotated pointer arguments.
   const DistinctAttr entryClass;
 

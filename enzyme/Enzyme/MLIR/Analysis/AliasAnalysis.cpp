@@ -919,7 +919,8 @@ void enzyme::AliasAnalysis::transfer(
             if (srcPointsTo.isUnknown()) {
               propagateIfChanged(result, result->markUnknown());
             } else if (srcPointsTo.isUndefined()) {
-              continue;
+              createImplicitArgDereference(op, latticeElement, srcClass,
+                                           result);
             } else {
               propagateIfChanged(result,
                                  result->insert(srcPointsTo.getAliasClasses()));
@@ -956,6 +957,34 @@ void enzyme::AliasAnalysis::transfer(
     for (const AliasClassLattice *operandLattice : operands)
       r |= resultLattice->join(*operandLattice);
     propagateIfChanged(resultLattice, r);
+  }
+}
+
+void enzyme::AliasAnalysis::createImplicitArgDereference(
+    Operation *op, AliasClassLattice *source, DistinctAttr srcClass,
+    AliasClassLattice *result) {
+  if (auto debugLabel =
+          dyn_cast_if_present<StringAttr>(srcClass.getReferencedAttr())) {
+    // TODO(jacob): make a custom attribute to encode the pseudo argument alias
+    // classes and their implicit dereferences
+    if (debugLabel.strref().starts_with("arg")) {
+      auto derefLabel = StringAttr::get(debugLabel.getContext(),
+                                        debugLabel.strref() + "-deref");
+      // TODO(jacob): need an interface for the read destination
+      assert(op->getNumResults() == 1 &&
+             "expected there to be a unique read destination");
+      Value readResult = op->getResult(0);
+      DistinctAttr derefClass =
+          originalClasses.getOriginalClass(readResult, derefLabel);
+      op->setAttr("implicit-deref", derefClass);
+      propagateIfChanged(result, result->join(AliasClassLattice::single(
+                                     readResult, derefClass)));
+      // The read source points to the dereferenced class
+      auto *pointsToState = getOrCreate<PointsToSets>(op);
+      propagateIfChanged(pointsToState,
+                         pointsToState->insert(source->getAliasClassesObject(),
+                                               AliasClassSet(derefClass)));
+    }
   }
 }
 
