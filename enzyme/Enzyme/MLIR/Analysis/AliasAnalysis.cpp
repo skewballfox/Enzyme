@@ -121,6 +121,32 @@ static ChangeResult mergeSets(DenseSet<T> &dest, const DenseSet<T> &src) {
   return dest.size() == oldSize ? ChangeResult::NoChange : ChangeResult::Change;
 }
 
+// Serialize the (relative) points to set state. This will be attached to the
+// function.
+Attribute enzyme::PointsToSets::serialize(MLIRContext *ctx) const {
+  if (pointsTo.empty()) {
+    return StringAttr::get(ctx, "<empty>");
+  }
+
+  SmallVector<Attribute> pointsToArray;
+  for (const auto &[srcClass, destClasses] : pointsTo) {
+    SmallVector<Attribute, 2> pair = {srcClass};
+    SmallVector<Attribute, 5> aliasClasses;
+    if (destClasses.isUnknown()) {
+      aliasClasses.push_back(StringAttr::get(ctx, "unknown"));
+    } else if (destClasses.isUndefined()) {
+      aliasClasses.push_back(StringAttr::get(ctx, "undefined"));
+    } else {
+      for (const DistinctAttr &destClass : destClasses.getAliasClasses()) {
+        aliasClasses.push_back(destClass);
+      }
+    }
+    pair.push_back(ArrayAttr::get(ctx, aliasClasses));
+    pointsToArray.push_back(ArrayAttr::get(ctx, pair));
+  }
+  return ArrayAttr::get(ctx, pointsToArray);
+}
+
 void enzyme::PointsToSets::print(raw_ostream &os) const {
   if (pointsTo.empty()) {
     os << "<empty>\n";
@@ -798,26 +824,24 @@ void enzyme::AliasAnalysis::setToEntryState(AliasClassLattice *lattice) {
   if (auto arg = dyn_cast<BlockArgument>(lattice->getPoint())) {
     if (auto funcOp =
             dyn_cast<FunctionOpInterface>(arg.getOwner()->getParentOp())) {
-      if (funcOp.getArgAttr(arg.getArgNumber(),
-                            LLVM::LLVMDialect::getNoAliasAttrName())) {
-        Attribute debugLabel =
-            funcOp.getArgAttr(arg.getArgNumber(), "enzyme.tag");
-        // TODO: this may currently be failing because `setToEntryState`
-        // is used by the framework to set the pessimistic fixpoint (top), which
-        // isn't correct for pessimistic analysis for which `setToEntryState` is
-        // the undefined state (bottom).
-        assert(lattice->isUndefined() && "resetting lattice point");
-
-        DistinctAttr noaliasClass =
-            originalClasses.getOriginalClass(lattice->getPoint(), debugLabel);
-        return propagateIfChanged(lattice,
-                                  lattice->join(AliasClassLattice::single(
-                                      lattice->getPoint(), noaliasClass)));
-      }
       // TODO: Not safe in general, integers can be a result of ptrtoint. We
       // need a type analysis here I guess?
-      if (isPointerLike(arg.getType()))
-        return propagateIfChanged(lattice, lattice->insert({entryClass}));
+      if (isPointerLike(arg.getType())) {
+        // Create a distinct attribute for each function argument. This does
+        // _not_ mean assuming arguments do not alias, merely that we defer
+        // reasoning about arguments aliasing each other until analyzing
+        // callers. These distinct attributes may be unified (copied over?)
+        // depending on the calling contexts of this function.
+        auto debugLabel = StringAttr::get(
+            funcOp.getContext(), "arg-" + funcOp.getName() + "-" +
+                                     std::to_string(arg.getArgNumber()));
+        DistinctAttr argClass =
+            originalClasses.getOriginalClass(lattice->getPoint(), debugLabel);
+        funcOp.setArgAttr(arg.getArgNumber(), "enzyme.origin", argClass);
+        return propagateIfChanged(lattice,
+                                  lattice->join(AliasClassLattice::single(
+                                      lattice->getPoint(), argClass)));
+      }
     }
   }
   if (!lattice->isUndefined())
@@ -855,7 +879,14 @@ void enzyme::AliasAnalysis::transfer(
       // Mark the result of the allocation as a fresh memory location.
       for (AliasClassLattice *result : results) {
         if (result->getPoint() == value) {
-          Attribute debugLabel = op->getAttr("tag");
+          std::string debugLabel;
+          llvm::raw_string_ostream sstream(debugLabel);
+          // TODO: this is based on the assumption that freshness is transitive
+          // because we're going bottom-up.
+          sstream << "fresh-";
+          if (op->hasAttr("tag")) {
+            op->getAttr("tag").print(sstream);
+          }
           auto fresh = AliasClassLattice::single(
               result->getPoint(),
               originalClasses.getOriginalClass(result->getPoint(), debugLabel));
