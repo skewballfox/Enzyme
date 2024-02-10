@@ -332,6 +332,7 @@ ChangeResult enzyme::PointsToSets::markAllExceptPointToUnknown(
 
 // TODO: Reduce code duplication with activity analysis
 std::optional<Value> getStored(Operation *op);
+std::optional<Value> getCopySource(Operation *op);
 
 void enzyme::PointsToPointerAnalysis::processCapturingStore(
     ProgramPoint dependent, PointsToSets *after, Value capturedValue,
@@ -417,6 +418,8 @@ void enzyme::PointsToPointerAnalysis::visitOperation(Operation *op,
     SmallVector<Value> storedValues;
     if (std::optional<Value> stored = getStored(op)) {
       storedValues.push_back(*stored);
+    } else if (std::optional<Value> stored = getCopySource(op)) {
+      // TODO: implement capturing via copy ops
     } else {
       llvm::append_range(storedValues, pointerLikeOperands);
     }
@@ -963,6 +966,28 @@ void enzyme::AliasAnalysis::transfer(
 void enzyme::AliasAnalysis::createImplicitArgDereference(
     Operation *op, AliasClassLattice *source, DistinctAttr srcClass,
     AliasClassLattice *result) {
+  // TODO(jacob): need an interface for the read destination
+  assert(op->getNumResults() == 1 &&
+         "expected there to be a unique read destination");
+  Value readResult = op->getResult(0);
+  if (!isPointerLike(readResult.getType())) {
+    return;
+  }
+
+  auto parent = op->getParentOfType<FunctionOpInterface>();
+  assert(parent && "failed to find function parent");
+  auto *entryPointsToSets =
+      getOrCreateFor<PointsToSets>(op, &parent.getCallableRegion()->front());
+  if (!entryPointsToSets->getPointsTo(srcClass).isUndefined()) {
+    // Only create the pseudo class if another load hasn't already created the
+    // implicitly dereferenced pseudo class.
+
+    // TODO(jacob): might be thinking about this the wrong way. It could be that
+    // pseudo classes should be identified using a different mechanism than
+    // distinct attributes such that two points could be visited that have a
+    // get-or-create mechanism for the implicitly dereferenced pseudo classes.
+    return;
+  }
   if (auto debugLabel =
           dyn_cast_if_present<StringAttr>(srcClass.getReferencedAttr())) {
     // TODO(jacob): make a custom attribute to encode the pseudo argument alias
@@ -970,17 +995,14 @@ void enzyme::AliasAnalysis::createImplicitArgDereference(
     if (debugLabel.strref().starts_with("arg")) {
       auto derefLabel = StringAttr::get(debugLabel.getContext(),
                                         debugLabel.strref() + "-deref");
-      // TODO(jacob): need an interface for the read destination
-      assert(op->getNumResults() == 1 &&
-             "expected there to be a unique read destination");
-      Value readResult = op->getResult(0);
       DistinctAttr derefClass =
           originalClasses.getOriginalClass(readResult, derefLabel);
       op->setAttr("implicit-deref", derefClass);
       propagateIfChanged(result, result->join(AliasClassLattice::single(
                                      readResult, derefClass)));
       // The read source points to the dereferenced class
-      auto *pointsToState = getOrCreate<PointsToSets>(op);
+      auto *pointsToState =
+          getOrCreate<PointsToSets>(&parent.getCallableRegion()->front());
       propagateIfChanged(pointsToState,
                          pointsToState->insert(source->getAliasClassesObject(),
                                                AliasClassSet(derefClass)));
