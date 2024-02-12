@@ -387,6 +387,10 @@ void enzyme::PointsToPointerAnalysis::visitOperation(Operation *op,
   // fixpoint and bail.
   auto memory = dyn_cast<MemoryEffectOpInterface>(op);
   if (!memory) {
+    if (isa<LLVM::NoAliasScopeDeclOp>(op)) {
+      // Treat this as a no-op
+      return;
+    }
     propagateIfChanged(after, after->markAllPointToUnknown());
     return;
   }
@@ -888,7 +892,11 @@ void enzyme::AliasAnalysis::transfer(
           // because we're going bottom-up.
           sstream << "fresh-";
           if (op->hasAttr("tag")) {
-            op->getAttr("tag").print(sstream);
+            if (auto stringTag = dyn_cast<StringAttr>(op->getAttr("tag"))) {
+              sstream << stringTag.getValue();
+            } else {
+              op->getAttr("tag").print(sstream);
+            }
           }
           auto fresh = AliasClassLattice::single(
               result->getPoint(),
