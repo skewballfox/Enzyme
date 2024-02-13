@@ -866,6 +866,13 @@ void enzyme::AliasAnalysis::setToEntryState(AliasClassLattice *lattice) {
 //
 // TODO: turn this into an interface.
 static bool isAliasTransferFullyDescribedByMemoryEffects(Operation *op) {
+  if (auto call = dyn_cast<CallOpInterface>(op)) {
+    if (auto symbol = dyn_cast<SymbolRefAttr>(call.getCallableForCallee())) {
+      if (symbol.getLeafReference().getValue() == "malloc") {
+        return true;
+      }
+    }
+  }
   return isa<memref::LoadOp, memref::StoreOp, LLVM::LoadOp, LLVM::StoreOp>(op);
 }
 
@@ -925,6 +932,9 @@ void enzyme::AliasAnalysis::transfer(
         for (auto srcClass : latticeElement->getAliasClasses()) {
           const auto &srcPointsTo = pointsToSets->getPointsTo(srcClass);
           for (AliasClassLattice *result : results) {
+            if (!isPointerLike(result->getPoint().getType()))
+              continue;
+
             // TODO: consider some sort of "point join" or better insert that
             // doesn't require a conditional here.
             if (srcPointsTo.isUnknown()) {
@@ -974,10 +984,7 @@ void enzyme::AliasAnalysis::transfer(
 void enzyme::AliasAnalysis::createImplicitArgDereference(
     Operation *op, AliasClassLattice *source, DistinctAttr srcClass,
     AliasClassLattice *result) {
-  // TODO(jacob): need an interface for the read destination
-  assert(op->getNumResults() == 1 &&
-         "expected there to be a unique read destination");
-  Value readResult = op->getResult(0);
+  Value readResult = result->getPoint();
   if (!isPointerLike(readResult.getType())) {
     return;
   }
