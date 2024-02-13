@@ -147,6 +147,25 @@ Attribute enzyme::PointsToSets::serialize(MLIRContext *ctx) const {
   return ArrayAttr::get(ctx, pointsToArray);
 }
 
+// TODO: a bit easier to prototype with a dense map directly, evaluate
+// if it'd be better to change the PointsToSets data structure to
+// support this
+static void
+deserializePointsTo(ArrayAttr summaryAttr,
+                    DenseMap<DistinctAttr, enzyme::AliasClassSet> &summaryMap) {
+  for (auto pair : summaryAttr.getAsRange<ArrayAttr>()) {
+    assert(pair.size() == 2);
+    auto pointer = cast<DistinctAttr>(pair[0]);
+    auto pointsTo = cast<ArrayAttr>(pair[1]).getAsRange<DistinctAttr>();
+    enzyme::AliasClassSet pointsToSet;
+    // TODO: see if there's a nice way to convert the
+    // AliasClassSet::insert method to accept this iterator
+    (void)pointsToSet.insert(
+        DenseSet<DistinctAttr>(pointsTo.begin(), pointsTo.end()));
+    summaryMap.insert({pointer, pointsToSet});
+  }
+}
+
 void enzyme::PointsToSets::print(raw_ostream &os) const {
   if (pointsTo.empty()) {
     os << "<empty>\n";
@@ -543,6 +562,53 @@ getFunctionInaccessibleModRef(FunctionOpInterface func) {
   return std::nullopt;
 }
 
+void enzyme::PointsToPointerAnalysis::processCallToSummarizedFunc(
+    CallOpInterface call,
+    DenseMap<DistinctAttr, enzyme::AliasClassSet> &summary,
+    PointsToSets *after) {
+  StringRef calleeName = cast<SymbolRefAttr>(call.getCallableForCallee())
+                             .getLeafReference()
+                             .getValue();
+  auto lookup = [&](StringRef key) -> std::optional<AliasClassSet> {
+    for (const auto &[attr, aliasClassSet] : summary) {
+      if (auto strAttr =
+              dyn_cast_if_present<StringAttr>(attr.getReferencedAttr())) {
+        if (strAttr.getValue() == key) {
+          return aliasClassSet;
+        }
+      }
+    }
+    return std::nullopt;
+  };
+
+  ChangeResult changed = ChangeResult::NoChange;
+  for (auto &&[i, argOperand] : llvm::enumerate(call.getArgOperands())) {
+    auto *arg = getOrCreateFor<AliasClassLattice>(call, argOperand);
+
+    std::string key = ("arg-" + calleeName + "-" + std::to_string(i)).str();
+    std::optional<AliasClassSet> aliasClasses = lookup(key);
+    // If the argument class isn't in the summary, it hasn't changed what
+    // it points to during the function.
+    if (!aliasClasses)
+      continue;
+
+    for (DistinctAttr ac : aliasClasses->getAliasClasses()) {
+      if (auto strAttr =
+              dyn_cast_if_present<StringAttr>(ac.getReferencedAttr())) {
+        // Fresh classes go in directly
+        if (strAttr.getValue().starts_with("fresh")) {
+          changed |=
+              after->insert(arg->getAliasClassesObject(), AliasClassSet(ac));
+        } else {
+          // TODO: need to handle unifying implicitly de-referenced classes
+        }
+      }
+    }
+  }
+
+  propagateIfChanged(after, changed);
+}
+
 void enzyme::PointsToPointerAnalysis::visitCallControlFlowTransfer(
     CallOpInterface call, CallControlFlowAction action,
     const PointsToSets &before, PointsToSets *after) {
@@ -585,6 +651,13 @@ void enzyme::PointsToPointerAnalysis::visitCallControlFlowTransfer(
     //     into pointers that are non-arguments.
     if (auto callee = SymbolTable::lookupNearestSymbolFrom<FunctionOpInterface>(
             call, symbol.getLeafReference())) {
+      using llvm::errs;
+      if (auto summaryAttr = callee->getAttrOfType<ArrayAttr>("p2psummary")) {
+        DenseMap<DistinctAttr, AliasClassSet> summary;
+        deserializePointsTo(summaryAttr, summary);
+        return processCallToSummarizedFunc(call, summary, after);
+      }
+
       std::optional<LLVM::ModRefInfo> argModRef = getFunctionArgModRef(callee);
       std::optional<LLVM::ModRefInfo> otherModRef =
           getFunctionOtherModRef(callee);

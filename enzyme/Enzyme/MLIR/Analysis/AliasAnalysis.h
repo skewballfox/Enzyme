@@ -288,6 +288,11 @@ public:
                              Value capturedValue, Value destinationAddress,
                              bool isMustStore = false);
 
+  void
+  processCallToSummarizedFunc(CallOpInterface call,
+                              DenseMap<DistinctAttr, AliasClassSet> &summary,
+                              PointsToSets *after);
+
 private:
   /// Alias classes originally assigned to known-distinct values, e.g., fresh
   /// allocations, by this analysis. This does NOT necessarily need to be shared
