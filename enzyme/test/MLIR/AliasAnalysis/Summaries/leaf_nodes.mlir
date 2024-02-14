@@ -548,3 +548,132 @@ llvm.func local_unnamed_addr @relatives_to_absolutes(%arg0: i32 {llvm.noundef}, 
 ^bb23:  // 2 preds: ^bb0, ^bb22
   llvm.return
 }
+
+// CHECK-LABEL: processing function @angle_axis_to_rotation_matrix
+// CHECK: p2p summary:
+// CHECK-NEXT:    distinct[0]<"arg-angle_axis_to_rotation_matrix-1"> -> [distinct[0]<"arg-angle_axis_to_rotation_matrix-1-deref">]
+llvm.func local_unnamed_addr @angle_axis_to_rotation_matrix(%arg0: !llvm.ptr {llvm.nocapture, llvm.noundef, llvm.readonly}, %arg1: !llvm.ptr {llvm.nocapture, llvm.noundef, llvm.readonly}) attributes {frame_pointer = #llvm.framePointerKind<"non-leaf">, memory = #llvm.memory_effects<other = write, argMem = readwrite, inaccessibleMem = none>, passthrough = ["nofree", "norecurse", "nosync", "nounwind", "ssp", ["uwtable", "1"], ["approx-func-fp-math", "true"], ["no-infs-fp-math", "true"], ["no-nans-fp-math", "true"], ["no-signed-zeros-fp-math", "true"], ["no-trapping-math", "true"], ["stack-protector-buffer-size", "8"], ["target-cpu", "apple-m1"], ["unsafe-fp-math", "true"]], target_cpu = "apple-m1", target_features = #llvm.target_features<["+aes", "+complxnum", "+crc", "+dotprod", "+fp-armv8", "+fp16fml", "+fullfp16", "+jsconv", "+lse", "+neon", "+ras", "+rcpc", "+rdm", "+sha2", "+sha3", "+v8.1a", "+v8.2a", "+v8.3a", "+v8.4a", "+v8.5a", "+v8a", "+zcm", "+zcz"]>} {
+  %0 = llvm.mlir.constant(1 : i64) : i64
+  %1 = llvm.mlir.constant(3 : i64) : i64
+  %2 = llvm.mlir.constant(1.000000e-04 : f64) : f64
+  %3 = llvm.mlir.constant(2 : i64) : i64
+  %4 = llvm.mlir.constant(1.000000e+00 : f64) : f64
+  %5 = llvm.mlir.constant(0 : i64) : i64
+  %6 = llvm.mlir.constant(2 : i32) : i32
+  %7 = llvm.mlir.constant(1 : i32) : i32
+  %8 = llvm.mlir.constant(0 : i32) : i32
+  %9 = llvm.mlir.constant(0.000000e+00 : f64) : f64
+  %10 = llvm.load %arg0 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %11 = llvm.fmul %10, %10  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  llvm.br ^bb1(%0, %11 : i64, f64)
+^bb1(%12: i64, %13: f64):  // 2 preds: ^bb0, ^bb1
+  %14 = llvm.getelementptr inbounds %arg0[%12] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %15 = llvm.load %14 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %16 = llvm.fmul %15, %15  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %17 = llvm.fadd %16, %13  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %18 = llvm.add %12, %0 overflow<nsw, nuw>  : i64
+  %19 = llvm.icmp "eq" %18, %1 : i64
+  llvm.cond_br %19, ^bb2, ^bb1(%18, %17 : i64, f64) {loop_annotation = #loop_annotation}
+^bb2:  // pred: ^bb1
+  %20 = llvm.intr.sqrt(%17)  {fastmathFlags = #llvm.fastmath<fast>} : (f64) -> f64
+  %21 = llvm.fcmp "olt" %20, %2 {fastmathFlags = #llvm.fastmath<fast>} : f64
+  llvm.cond_br %21, ^bb3, ^bb9
+^bb3:  // pred: ^bb2
+  %22 = llvm.getelementptr inbounds %arg1[%5, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %23 = llvm.load %22 {alignment = 4 : i64, tbaa = [#tbaa_tag4]} : !llvm.ptr -> i32
+  %24 = llvm.icmp "sgt" %23, %8 : i32
+  llvm.cond_br %24, ^bb4, ^bb10
+^bb4:  // pred: ^bb3
+  %25 = llvm.load %arg1 {alignment = 8 : i64, tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  %26 = llvm.icmp "sgt" %25, %8 : i32
+  %27 = llvm.getelementptr inbounds %arg1[%5, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %28 = llvm.zext %23 : i32 to i64
+  %29 = llvm.zext %25 : i32 to i64
+  llvm.br ^bb5(%5 : i64)
+^bb5(%30: i64):  // 2 preds: ^bb4, ^bb8
+  llvm.cond_br %26, ^bb6, ^bb8
+^bb6:  // pred: ^bb5
+  %31 = llvm.trunc %30 : i64 to i32
+  %32 = llvm.mul %25, %31  : i32
+  %33 = llvm.zext %32 : i32 to i64
+  %34 = llvm.load %27 {alignment = 8 : i64, tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %35 = llvm.getelementptr %34[%33] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.br ^bb7(%5 : i64)
+^bb7(%36: i64):  // 2 preds: ^bb6, ^bb7
+  %37 = llvm.icmp "eq" %30, %36 : i64
+  %38 = llvm.select %37, %4, %9 : i1, f64
+  %39 = llvm.getelementptr %35[%36] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %38, %39 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %40 = llvm.add %36, %0 overflow<nsw, nuw>  : i64
+  %41 = llvm.icmp "eq" %40, %29 : i64
+  llvm.cond_br %41, ^bb8, ^bb7(%40 : i64) {loop_annotation = #loop_annotation}
+^bb8:  // 2 preds: ^bb5, ^bb7
+  %42 = llvm.add %30, %0 overflow<nsw, nuw>  : i64
+  %43 = llvm.icmp "eq" %42, %28 : i64
+  llvm.cond_br %43, ^bb10, ^bb5(%42 : i64) {loop_annotation = #loop_annotation}
+^bb9:  // pred: ^bb2
+  %44 = llvm.fdiv %10, %20  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %45 = llvm.getelementptr inbounds %arg0[%0] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %46 = llvm.load %45 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %47 = llvm.fdiv %46, %20  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %48 = llvm.getelementptr inbounds %arg0[%3] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %49 = llvm.load %48 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %50 = llvm.fdiv %49, %20  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %51 = llvm.intr.sin(%20)  {fastmathFlags = #llvm.fastmath<fast>} : (f64) -> f64
+  %52 = llvm.intr.cos(%20)  {fastmathFlags = #llvm.fastmath<fast>} : (f64) -> f64
+  %53 = llvm.fmul %44, %44  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %54 = llvm.fsub %4, %53  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %55 = llvm.fmul %54, %52  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %56 = llvm.fadd %55, %53  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %57 = llvm.getelementptr inbounds %arg1[%5, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %58 = llvm.load %57 {alignment = 8 : i64, tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  llvm.store %56, %58 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %59 = llvm.fsub %4, %52  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %60 = llvm.fmul %59, %44  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %61 = llvm.fmul %60, %47  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %62 = llvm.fmul %50, %51  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %63 = llvm.fsub %61, %62  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %64 = llvm.load %arg1 {alignment = 8 : i64, tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  %65 = llvm.sext %64 : i32 to i64
+  %66 = llvm.getelementptr inbounds %58[%65] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %63, %66 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %67 = llvm.fmul %60, %50  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %68 = llvm.fmul %47, %51  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %69 = llvm.fadd %67, %68  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %70 = llvm.shl %64, %7 overflow<nsw>  : i32
+  %71 = llvm.sext %70 : i32 to i64
+  %72 = llvm.getelementptr inbounds %58[%71] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %69, %72 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %73 = llvm.fadd %61, %62  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %74 = llvm.getelementptr inbounds %58[%0] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %73, %74 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %75 = llvm.fmul %47, %47  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %76 = llvm.fsub %4, %75  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %77 = llvm.fmul %76, %52  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %78 = llvm.fadd %77, %75  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %79 = llvm.getelementptr %66[%0] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %78, %79 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %80 = llvm.fmul %47, %59  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %81 = llvm.fmul %80, %50  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %82 = llvm.fmul %44, %51  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %83 = llvm.fsub %81, %82  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %84 = llvm.or %70, %7  : i32
+  %85 = llvm.sext %84 : i32 to i64
+  %86 = llvm.getelementptr inbounds %58[%85] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %83, %86 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %87 = llvm.fsub %67, %68  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %88 = llvm.getelementptr inbounds %58[%3] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %87, %88 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %89 = llvm.fadd %81, %82  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %90 = llvm.getelementptr %66[%3] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %89, %90 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %91 = llvm.fmul %50, %50  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %92 = llvm.fsub %4, %91  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %93 = llvm.fmul %92, %52  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %94 = llvm.fadd %93, %91  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %95 = llvm.getelementptr %72[%3] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %94, %95 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  llvm.br ^bb10
+^bb10:  // 3 preds: ^bb3, ^bb8, ^bb9
+  llvm.return
+}
