@@ -383,3 +383,168 @@ llvm.func local_unnamed_addr @euler_angles_to_rotation_matrix(%arg0: !llvm.ptr {
   llvm.call @free(%77) : (!llvm.ptr) -> ()
   llvm.return
 }
+
+// CHECK-LABEL: processing function @relatives_to_absolutes
+// CHECK: p2p summary:
+// CHECK-NEXT:    distinct[0]<"arg-relatives_to_absolutes-1"> -> [distinct[0]<"arg-relatives_to_absolutes-1-deref">]
+// CHECK-NEXT:    distinct[0]<"arg-relatives_to_absolutes-3"> -> [distinct[0]<"arg-relatives_to_absolutes-3-deref">, distinct[1]<"fresh-rta1">, distinct[2]<"fresh-rta2">]
+// CHECK-NEXT:    distinct[0]<"fresh-rta1"> -> []
+// CHECK-NEXT:    distinct[0]<"fresh-rta2"> -> []
+llvm.func local_unnamed_addr @relatives_to_absolutes(%arg0: i32 {llvm.noundef}, %arg1: !llvm.ptr {llvm.nocapture, llvm.noundef, llvm.readonly}, %arg2: !llvm.ptr {llvm.nocapture, llvm.noundef, llvm.readonly}, %arg3: !llvm.ptr {llvm.nocapture, llvm.noundef}) attributes {frame_pointer = #llvm.framePointerKind<"non-leaf">, passthrough = ["nounwind", "ssp", ["uwtable", "1"], ["approx-func-fp-math", "true"], ["no-infs-fp-math", "true"], ["no-nans-fp-math", "true"], ["no-signed-zeros-fp-math", "true"], ["no-trapping-math", "true"], ["stack-protector-buffer-size", "8"], ["target-cpu", "apple-m1"], ["unsafe-fp-math", "true"]], target_cpu = "apple-m1", target_features = #llvm.target_features<["+aes", "+complxnum", "+crc", "+dotprod", "+fp-armv8", "+fp16fml", "+fullfp16", "+jsconv", "+lse", "+neon", "+ras", "+rcpc", "+rdm", "+sha2", "+sha3", "+v8.1a", "+v8.2a", "+v8.3a", "+v8.4a", "+v8.5a", "+v8a", "+zcm", "+zcz"]>} {
+  %0 = llvm.mlir.constant(0 : i32) : i32
+  %1 = llvm.mlir.constant(0 : i64) : i64
+  %2 = llvm.mlir.constant(-1 : i32) : i32
+  %3 = llvm.mlir.constant(1 : i32) : i32
+  %4 = llvm.mlir.constant(2 : i32) : i32
+  %5 = llvm.mlir.zero : !llvm.ptr
+  %6 = llvm.mlir.constant(3 : i64) : i64
+  %7 = llvm.mlir.constant(1 : i64) : i64
+  %8 = llvm.icmp "sgt" %arg0, %0 : i32
+  llvm.cond_br %8, ^bb1, ^bb23
+^bb1:  // pred: ^bb0
+  %9 = llvm.zext %arg0 : i32 to i64
+  llvm.br ^bb2(%1 : i64)
+^bb2(%10: i64):  // 2 preds: ^bb1, ^bb22
+  %11 = llvm.getelementptr inbounds %arg2[%10] : (!llvm.ptr, i64) -> !llvm.ptr, i32
+  %12 = llvm.load %11 {alignment = 4 : i64, tbaa = [#tbaa_tag2]} : !llvm.ptr -> i32
+  %13 = llvm.icmp "eq" %12, %2 : i32
+  llvm.cond_br %13, ^bb3, ^bb8
+^bb3:  // pred: ^bb2
+  %14 = llvm.getelementptr inbounds %arg3[%10] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %15 = llvm.getelementptr inbounds %arg1[%10] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %16 = llvm.getelementptr inbounds %arg3[%10, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %17 = llvm.load %16 {alignment = 8 : i64, tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %18 = llvm.icmp "eq" %17, %5 : !llvm.ptr
+  llvm.cond_br %18, ^bb5, ^bb4
+^bb4:  // pred: ^bb3
+  llvm.call @free(%17) : (!llvm.ptr) -> ()
+  llvm.br ^bb5
+^bb5:  // 2 preds: ^bb3, ^bb4
+  %19 = llvm.getelementptr inbounds %arg1[%10, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %20 = llvm.load %19 {alignment = 4 : i64, tbaa = [#tbaa_tag4]} : !llvm.ptr -> i32
+  %21 = llvm.getelementptr inbounds %arg3[%10, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  llvm.store %20, %21 {alignment = 4 : i64, tbaa = [#tbaa_tag4]} : i32, !llvm.ptr
+  %22 = llvm.load %15 {alignment = 8 : i64, tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  llvm.store %22, %14 {alignment = 8 : i64, tbaa = [#tbaa_tag3]} : i32, !llvm.ptr
+  %23 = llvm.mul %22, %20 overflow<nsw>  : i32
+  %24 = llvm.sext %23 : i32 to i64
+  %25 = llvm.shl %24, %6 overflow<nsw>  : i64
+  %26 = llvm.call @malloc(%25) {tag = "rta1"} : (i64) -> !llvm.ptr
+  llvm.store %26, %16 {alignment = 8 : i64, tbaa = [#tbaa_tag5]} : !llvm.ptr, !llvm.ptr
+  %27 = llvm.icmp "sgt" %23, %0 : i32
+  llvm.cond_br %27, ^bb6, ^bb22
+^bb6:  // pred: ^bb5
+  %28 = llvm.getelementptr inbounds %arg1[%10, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %29 = llvm.load %28 {alignment = 8 : i64, tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %30 = llvm.zext %23 : i32 to i64
+  llvm.br ^bb7(%1 : i64)
+^bb7(%31: i64):  // 2 preds: ^bb6, ^bb7
+  %32 = llvm.getelementptr inbounds %29[%31] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %33 = llvm.load %32 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %34 = llvm.getelementptr inbounds %26[%31] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %33, %34 {alignment = 8 : i64, tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %35 = llvm.add %31, %7 overflow<nsw, nuw>  : i64
+  %36 = llvm.icmp "eq" %35, %30 : i64
+  llvm.cond_br %36, ^bb22, ^bb7(%35 : i64) {loop_annotation = #loop_annotation}
+^bb8:  // pred: ^bb2
+  %37 = llvm.sext %12 : i32 to i64
+  %38 = llvm.getelementptr inbounds %arg3[%37] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %39 = llvm.getelementptr inbounds %arg1[%10] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %40 = llvm.getelementptr inbounds %arg3[%10] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  llvm.intr.experimental.noalias.scope.decl #alias_scope3
+  llvm.intr.experimental.noalias.scope.decl #alias_scope4
+  llvm.intr.experimental.noalias.scope.decl #alias_scope5
+  %41 = llvm.load %38 {alias_scopes = [#alias_scope3], alignment = 8 : i64, noalias_scopes = [#alias_scope4, #alias_scope5], tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  %42 = llvm.getelementptr inbounds %arg1[%10, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %43 = llvm.load %42 {alias_scopes = [#alias_scope4], alignment = 4 : i64, noalias_scopes = [#alias_scope3, #alias_scope5], tbaa = [#tbaa_tag4]} : !llvm.ptr -> i32
+  %44 = llvm.load %40 {alias_scopes = [#alias_scope5], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  %45 = llvm.getelementptr inbounds %arg3[%10, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %46 = llvm.load %45 {alias_scopes = [#alias_scope5], alignment = 4 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag4]} : !llvm.ptr -> i32
+  %47 = llvm.mul %46, %44 overflow<nsw>  : i32
+  %48 = llvm.mul %43, %41 overflow<nsw>  : i32
+  %49 = llvm.icmp "eq" %47, %48 : i32
+  llvm.cond_br %49, ^bb14, ^bb9
+^bb9:  // pred: ^bb8
+  %50 = llvm.getelementptr inbounds %arg3[%10, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %51 = llvm.load %50 {alias_scopes = [#alias_scope5], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %52 = llvm.icmp "eq" %51, %5 : !llvm.ptr
+  llvm.cond_br %52, ^bb11, ^bb10
+^bb10:  // pred: ^bb9
+  llvm.call @free(%51) {noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5]} : (!llvm.ptr) -> ()
+  llvm.br ^bb11
+^bb11:  // 2 preds: ^bb9, ^bb10
+  %53 = llvm.icmp "sgt" %48, %0 : i32
+  llvm.cond_br %53, ^bb12, ^bb13(%5 : !llvm.ptr)
+^bb12:  // pred: ^bb11
+  %54 = llvm.zext %48 : i32 to i64
+  %55 = llvm.shl %54, %6 overflow<nsw, nuw>  : i64
+  %56 = llvm.call @malloc(%55) {tag = "rta2"} : (i64) -> !llvm.ptr
+  llvm.br ^bb13(%56 : !llvm.ptr)
+^bb13(%57: !llvm.ptr):  // 2 preds: ^bb11, ^bb12
+  llvm.store %57, %50 {alias_scopes = [#alias_scope5], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag5]} : !llvm.ptr, !llvm.ptr
+  llvm.br ^bb14
+^bb14:  // 2 preds: ^bb8, ^bb13
+  llvm.store %43, %45 {alias_scopes = [#alias_scope5], alignment = 4 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag4]} : i32, !llvm.ptr
+  llvm.store %41, %40 {alias_scopes = [#alias_scope5], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag3]} : i32, !llvm.ptr
+  %58 = llvm.icmp "sgt" %41, %0 : i32
+  llvm.cond_br %58, ^bb15, ^bb22
+^bb15:  // pred: ^bb14
+  %59 = llvm.icmp "sgt" %43, %0 : i32
+  %60 = llvm.getelementptr inbounds %arg3[%37, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %61 = llvm.getelementptr inbounds %arg1[%10, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %62 = llvm.getelementptr inbounds %arg3[%10, 2] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %63 = llvm.getelementptr inbounds %arg3[%37, 1] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.struct<"struct.Matrix", (i32, i32, ptr)>
+  %64 = llvm.zext %41 : i32 to i64
+  %65 = llvm.zext %43 : i32 to i64
+  llvm.br ^bb16(%1 : i64)
+^bb16(%66: i64):  // 2 preds: ^bb15, ^bb21
+  llvm.cond_br %59, ^bb17, ^bb21
+^bb17:  // pred: ^bb16
+  %67 = llvm.load %60 {alias_scopes = [#alias_scope3], alignment = 8 : i64, noalias_scopes = [#alias_scope4, #alias_scope5], tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %68 = llvm.getelementptr inbounds %67[%66] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %69 = llvm.load %61 {alias_scopes = [#alias_scope4], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope5], tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %70 = llvm.load %39 {alias_scopes = [#alias_scope4], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope5], tbaa = [#tbaa_tag3]} : !llvm.ptr -> i32
+  %71 = llvm.load %62 {alias_scopes = [#alias_scope5], alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4], tbaa = [#tbaa_tag5]} : !llvm.ptr -> !llvm.ptr
+  %72 = llvm.load %63 {alias_scopes = [#alias_scope3], alignment = 4 : i64, noalias_scopes = [#alias_scope4, #alias_scope5], tbaa = [#tbaa_tag4]} : !llvm.ptr -> i32
+  %73 = llvm.icmp "sgt" %72, %3 : i32
+  %74 = llvm.sext %70 : i32 to i64
+  %75 = llvm.getelementptr %71[%66] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %76 = llvm.zext %72 : i32 to i64
+  llvm.br ^bb18(%1 : i64)
+^bb18(%77: i64):  // 2 preds: ^bb17, ^bb20
+  %78 = llvm.load %68 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %79 = llvm.mul %77, %74 overflow<nsw>  : i64
+  %80 = llvm.getelementptr inbounds %69[%79] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %81 = llvm.load %80 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %82 = llvm.fmul %81, %78  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %83 = llvm.mul %77, %64 overflow<nsw, nuw>  : i64
+  %84 = llvm.getelementptr %75[%83] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  llvm.store %82, %84 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  llvm.cond_br %73, ^bb19(%7, %82 : i64, f64), ^bb20
+^bb19(%85: i64, %86: f64):  // 2 preds: ^bb18, ^bb19
+  %87 = llvm.mul %85, %64 overflow<nsw, nuw>  : i64
+  %88 = llvm.getelementptr %68[%87] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %89 = llvm.load %88 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %90 = llvm.getelementptr %80[%85] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+  %91 = llvm.load %90 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : !llvm.ptr -> f64
+  %92 = llvm.fmul %91, %89  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  %93 = llvm.fadd %92, %86  {fastmathFlags = #llvm.fastmath<fast>} : f64
+  llvm.store %93, %84 {alignment = 8 : i64, noalias_scopes = [#alias_scope3, #alias_scope4, #alias_scope5], tbaa = [#tbaa_tag1]} : f64, !llvm.ptr
+  %94 = llvm.add %85, %7 overflow<nsw, nuw>  : i64
+  %95 = llvm.icmp "eq" %94, %76 : i64
+  llvm.cond_br %95, ^bb20, ^bb19(%94, %93 : i64, f64) {loop_annotation = #loop_annotation}
+^bb20:  // 2 preds: ^bb18, ^bb19
+  %96 = llvm.add %77, %7 overflow<nsw, nuw>  : i64
+  %97 = llvm.icmp "eq" %96, %65 : i64
+  llvm.cond_br %97, ^bb21, ^bb18(%96 : i64) {loop_annotation = #loop_annotation}
+^bb21:  // 2 preds: ^bb16, ^bb20
+  %98 = llvm.add %66, %7 overflow<nsw, nuw>  : i64
+  %99 = llvm.icmp "eq" %98, %64 : i64
+  llvm.cond_br %99, ^bb22, ^bb16(%98 : i64) {loop_annotation = #loop_annotation}
+^bb22:  // 4 preds: ^bb5, ^bb7, ^bb14, ^bb21
+  %100 = llvm.add %10, %7 overflow<nsw, nuw>  : i64
+  %101 = llvm.icmp "eq" %100, %9 : i64
+  llvm.cond_br %101, ^bb23, ^bb2(%100 : i64) {loop_annotation = #loop_annotation}
+^bb23:  // 2 preds: ^bb0, ^bb22
+  llvm.return
+}
