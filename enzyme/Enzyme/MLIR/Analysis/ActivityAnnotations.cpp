@@ -57,19 +57,20 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
   SymbolTableCollection symbolTable;
   SmallVector<CallableOpInterface> sorted;
   reverseToposortCallgraph(callee, &symbolTable, sorted);
+  raw_ostream &os = llvm::outs();
 
   for (CallableOpInterface node : sorted) {
     if (!node.getCallableRegion())
       continue;
     auto funcOp = cast<FunctionOpInterface>(node.getOperation());
-    errs() << "[ata] processing function " << funcOp.getName() << "\n";
+    os << "[ata] processing function @" << funcOp.getName() << "\n";
     DataFlowConfig config;
     config.setInterprocedural(false);
     DataFlowSolver solver(config);
 
     solver.load<dataflow::SparseConstantPropagation>();
     solver.load<dataflow::DeadCodeAnalysis>();
-    solver.load<enzyme::AliasAnalysis>(callee.getContext());
+    solver.load<enzyme::AliasAnalysis>(callee.getContext(), /*relative=*/true);
     solver.load<enzyme::PointsToPointerAnalysis>();
 
     if (failed(solver.initializeAndRun(node))) {
@@ -80,8 +81,16 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
       if (op.hasTrait<OpTrait::ReturnLike>()) {
         auto *p2sets = solver.lookupState<enzyme::PointsToSets>(&op);
         node->setAttr("p2psummary", p2sets->serialize(op.getContext()));
-        errs() << "[ata] p2p summary: " << *p2sets << "\n";
+        // errs() << "[ata] p2p summary:\n" << *p2sets << "\n";
+        os << "[ata] p2p summary:\n";
+        for (ArrayAttr pair : node->getAttrOfType<ArrayAttr>("p2psummary")
+                                  .getAsRange<ArrayAttr>()) {
+          os << "     " << pair[0] << " -> " << pair[1] << "\n";
+        }
       }
     }
+
+    if (funcOp.getName() == "get_posed_relatives")
+      return;
   }
 }

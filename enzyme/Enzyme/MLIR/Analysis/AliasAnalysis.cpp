@@ -140,10 +140,35 @@ Attribute enzyme::PointsToSets::serialize(MLIRContext *ctx) const {
       for (const DistinctAttr &destClass : destClasses.getAliasClasses()) {
         aliasClasses.push_back(destClass);
       }
+      std::sort(aliasClasses.begin(), aliasClasses.end(),
+                [](Attribute a, Attribute b) {
+                  if (auto strA = dyn_cast_if_present<StringAttr>(
+                          cast<DistinctAttr>(a).getReferencedAttr())) {
+                    if (auto strB = dyn_cast_if_present<StringAttr>(
+                            cast<DistinctAttr>(b).getReferencedAttr())) {
+                      return strA.strref() < strB.strref();
+                    }
+                  }
+                  // If there's no string to compare, sort them arbitrarily.
+                  return &a < &b;
+                });
     }
     pair.push_back(ArrayAttr::get(ctx, aliasClasses));
     pointsToArray.push_back(ArrayAttr::get(ctx, pair));
   }
+  std::sort(pointsToArray.begin(), pointsToArray.end(),
+            [](Attribute a, Attribute b) {
+              auto arrA = cast<ArrayAttr>(a);
+              auto arrB = cast<ArrayAttr>(b);
+              if (auto keyA = dyn_cast_if_present<StringAttr>(
+                      cast<DistinctAttr>(arrA[0]).getReferencedAttr())) {
+                if (auto keyB = dyn_cast_if_present<StringAttr>(
+                        cast<DistinctAttr>(arrB[0]).getReferencedAttr())) {
+                  return keyA.strref() < keyB.strref();
+                }
+              }
+              return &a < &b;
+            });
   return ArrayAttr::get(ctx, pointsToArray);
 }
 
@@ -907,20 +932,32 @@ void enzyme::AliasAnalysis::setToEntryState(AliasClassLattice *lattice) {
       // TODO: Not safe in general, integers can be a result of ptrtoint. We
       // need a type analysis here I guess?
       if (isPointerLike(arg.getType())) {
-        // Create a distinct attribute for each function argument. This does
-        // _not_ mean assuming arguments do not alias, merely that we defer
-        // reasoning about arguments aliasing each other until analyzing
-        // callers. These distinct attributes may be unified (copied over?)
-        // depending on the calling contexts of this function.
-        auto debugLabel = StringAttr::get(
-            funcOp.getContext(), "arg-" + funcOp.getName() + "-" +
-                                     std::to_string(arg.getArgNumber()));
-        DistinctAttr argClass =
-            originalClasses.getOriginalClass(lattice->getPoint(), debugLabel);
-        funcOp.setArgAttr(arg.getArgNumber(), "enzyme.origin", argClass);
-        return propagateIfChanged(lattice,
-                                  lattice->join(AliasClassLattice::single(
-                                      lattice->getPoint(), argClass)));
+        if (relative ||
+            funcOp.getArgAttr(arg.getArgNumber(),
+                              LLVM::LLVMDialect::getNoAliasAttrName())) {
+          // Create a distinct attribute for each function argument. This does
+          // _not_ mean assuming arguments do not alias, merely that we defer
+          // reasoning about arguments aliasing each other until analyzing
+          // callers. These distinct attributes may be unified (copied over?)
+          // depending on the calling contexts of this function.
+          StringAttr debugLabel = funcOp.getArgAttrOfType<StringAttr>(
+              arg.getArgNumber(), "enzyme.tag");
+          if (relative) {
+            debugLabel = StringAttr::get(
+                funcOp.getContext(), "arg-" + funcOp.getName() + "-" +
+                                         std::to_string(arg.getArgNumber()));
+          }
+          DistinctAttr argClass =
+              originalClasses.getOriginalClass(lattice->getPoint(), debugLabel);
+          funcOp.setArgAttr(arg.getArgNumber(), "enzyme.origin", argClass);
+          return propagateIfChanged(lattice,
+                                    lattice->join(AliasClassLattice::single(
+                                        lattice->getPoint(), argClass)));
+        } else {
+          return propagateIfChanged(lattice,
+                                    lattice->join(AliasClassLattice::single(
+                                        lattice->getPoint(), entryClass)));
+        }
       }
     }
   }
@@ -970,7 +1007,9 @@ void enzyme::AliasAnalysis::transfer(
           llvm::raw_string_ostream sstream(debugLabel);
           // TODO: this is based on the assumption that freshness is transitive
           // because we're going bottom-up.
-          sstream << "fresh-";
+          if (relative)
+            sstream << "fresh-";
+
           if (op->hasAttr("tag")) {
             if (auto stringTag = dyn_cast<StringAttr>(op->getAttr("tag"))) {
               sstream << stringTag.getValue();

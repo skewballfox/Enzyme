@@ -353,9 +353,13 @@ private:
 class AliasAnalysis
     : public dataflow::SparseForwardDataFlowAnalysis<AliasClassLattice> {
 public:
-  AliasAnalysis(DataFlowSolver &solver, MLIRContext *ctx)
+  AliasAnalysis(DataFlowSolver &solver, MLIRContext *ctx, bool relative = false)
       : SparseForwardDataFlowAnalysis(solver),
-        entryClass(DistinctAttr::create(StringAttr::get(ctx, "entry"))) {}
+        entryClass(DistinctAttr::create(StringAttr::get(ctx, "entry"))),
+        relative(relative) {
+    if (relative)
+      assert(!solver.getConfig().isInterprocedural());
+  }
 
   void setToEntryState(AliasClassLattice *lattice) override;
 
@@ -382,6 +386,10 @@ private:
 
   /// A special alias class to denote unannotated pointer arguments.
   const DistinctAttr entryClass;
+
+  /// If true, the analysis will operate in a relative intraprocedural way
+  /// assuming it is called bottom-up on the function call graph.
+  const bool relative;
 
   /// Alias classes originally assigned to known-distinct values, e.g., fresh
   /// allocations, by this analysis. This does NOT necessarily need to be shared
