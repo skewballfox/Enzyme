@@ -8,8 +8,6 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "llvm/Support/raw_ostream.h"
 
-using llvm::errs;
-
 using namespace mlir;
 
 namespace {
@@ -60,7 +58,7 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
   raw_ostream &os = llvm::outs();
 
   for (CallableOpInterface node : sorted) {
-    if (!node.getCallableRegion())
+    if (!node.getCallableRegion() || node->hasAttr("p2psummary"))
       continue;
     auto funcOp = cast<FunctionOpInterface>(node.getOperation());
     os << "[ata] processing function @" << funcOp.getName() << "\n";
@@ -81,7 +79,6 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
       if (op.hasTrait<OpTrait::ReturnLike>()) {
         auto *p2sets = solver.lookupState<enzyme::PointsToSets>(&op);
         node->setAttr("p2psummary", p2sets->serialize(op.getContext()));
-        // errs() << "[ata] p2p summary:\n" << *p2sets << "\n";
         os << "[ata] p2p summary:\n";
         for (ArrayAttr pair : node->getAttrOfType<ArrayAttr>("p2psummary")
                                   .getAsRange<ArrayAttr>()) {
@@ -89,8 +86,5 @@ void enzyme::runActivityAnnotations(FunctionOpInterface callee) {
         }
       }
     }
-
-    if (funcOp.getName() == "get_posed_relatives")
-      return;
   }
 }

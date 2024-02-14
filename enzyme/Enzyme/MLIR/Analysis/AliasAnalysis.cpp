@@ -140,35 +140,37 @@ Attribute enzyme::PointsToSets::serialize(MLIRContext *ctx) const {
       for (const DistinctAttr &destClass : destClasses.getAliasClasses()) {
         aliasClasses.push_back(destClass);
       }
-      std::sort(aliasClasses.begin(), aliasClasses.end(),
-                [](Attribute a, Attribute b) {
-                  if (auto strA = dyn_cast_if_present<StringAttr>(
-                          cast<DistinctAttr>(a).getReferencedAttr())) {
-                    if (auto strB = dyn_cast_if_present<StringAttr>(
-                            cast<DistinctAttr>(b).getReferencedAttr())) {
-                      return strA.strref() < strB.strref();
-                    }
-                  }
-                  // If there's no string to compare, sort them arbitrarily.
-                  return &a < &b;
-                });
+      llvm::sort(aliasClasses, [](Attribute a, Attribute b) {
+        auto distinctA = dyn_cast<DistinctAttr>(a);
+        auto distinctB = dyn_cast<DistinctAttr>(b);
+        if (distinctA && distinctB) {
+          if (auto strA = dyn_cast_if_present<StringAttr>(
+                  distinctA.getReferencedAttr())) {
+            if (auto strB = dyn_cast_if_present<StringAttr>(
+                    distinctB.getReferencedAttr())) {
+              return strA.strref() < strB.strref();
+            }
+          }
+        }
+        // If there's no string to compare, sort them arbitrarily.
+        return &a < &b;
+      });
     }
     pair.push_back(ArrayAttr::get(ctx, aliasClasses));
     pointsToArray.push_back(ArrayAttr::get(ctx, pair));
   }
-  std::sort(pointsToArray.begin(), pointsToArray.end(),
-            [](Attribute a, Attribute b) {
-              auto arrA = cast<ArrayAttr>(a);
-              auto arrB = cast<ArrayAttr>(b);
-              if (auto keyA = dyn_cast_if_present<StringAttr>(
-                      cast<DistinctAttr>(arrA[0]).getReferencedAttr())) {
-                if (auto keyB = dyn_cast_if_present<StringAttr>(
-                        cast<DistinctAttr>(arrB[0]).getReferencedAttr())) {
-                  return keyA.strref() < keyB.strref();
-                }
-              }
-              return &a < &b;
-            });
+  llvm::sort(pointsToArray, [](Attribute a, Attribute b) {
+    auto arrA = cast<ArrayAttr>(a);
+    auto arrB = cast<ArrayAttr>(b);
+    if (auto keyA = dyn_cast_if_present<StringAttr>(
+            cast<DistinctAttr>(arrA[0]).getReferencedAttr())) {
+      if (auto keyB = dyn_cast_if_present<StringAttr>(
+              cast<DistinctAttr>(arrB[0]).getReferencedAttr())) {
+        return keyA.strref() < keyB.strref();
+      }
+    }
+    return &a < &b;
+  });
   return ArrayAttr::get(ctx, pointsToArray);
 }
 
@@ -179,12 +181,14 @@ static void
 deserializePointsTo(ArrayAttr summaryAttr,
                     DenseMap<DistinctAttr, enzyme::AliasClassSet> &summaryMap) {
   for (auto pair : summaryAttr.getAsRange<ArrayAttr>()) {
-    assert(pair.size() == 2);
+    assert(pair.size() == 2 &&
+           "Expected summary to be in [[key, value]] format");
     auto pointer = cast<DistinctAttr>(pair[0]);
     auto pointsTo = cast<ArrayAttr>(pair[1]).getAsRange<DistinctAttr>();
     enzyme::AliasClassSet pointsToSet;
     // TODO: see if there's a nice way to convert the
-    // AliasClassSet::insert method to accept this iterator
+    // AliasClassSet::insert method to accept this iterator rather than
+    // constructing a DenseSet
     (void)pointsToSet.insert(
         DenseSet<DistinctAttr>(pointsTo.begin(), pointsTo.end()));
     summaryMap.insert({pointer, pointsToSet});
@@ -607,6 +611,7 @@ void enzyme::PointsToPointerAnalysis::processCallToSummarizedFunc(
   };
 
   ChangeResult changed = ChangeResult::NoChange;
+  // Unify the points-to summary with the actual lattices of function arguments
   for (auto &&[i, argOperand] : llvm::enumerate(call.getArgOperands())) {
     auto *arg = getOrCreateFor<AliasClassLattice>(call, argOperand);
 
@@ -676,7 +681,6 @@ void enzyme::PointsToPointerAnalysis::visitCallControlFlowTransfer(
     //     into pointers that are non-arguments.
     if (auto callee = SymbolTable::lookupNearestSymbolFrom<FunctionOpInterface>(
             call, symbol.getLeafReference())) {
-      using llvm::errs;
       if (auto summaryAttr = callee->getAttrOfType<ArrayAttr>("p2psummary")) {
         DenseMap<DistinctAttr, AliasClassSet> summary;
         deserializePointsTo(summaryAttr, summary);
@@ -1052,8 +1056,9 @@ void enzyme::AliasAnalysis::transfer(
             if (srcPointsTo.isUnknown()) {
               propagateIfChanged(result, result->markUnknown());
             } else if (srcPointsTo.isUndefined()) {
-              createImplicitArgDereference(op, latticeElement, srcClass,
-                                           result);
+              if (relative)
+                createImplicitArgDereference(op, latticeElement, srcClass,
+                                             result);
             } else {
               propagateIfChanged(result,
                                  result->insert(srcPointsTo.getAliasClasses()));
@@ -1096,11 +1101,10 @@ void enzyme::AliasAnalysis::transfer(
 void enzyme::AliasAnalysis::createImplicitArgDereference(
     Operation *op, AliasClassLattice *source, DistinctAttr srcClass,
     AliasClassLattice *result) {
-  Value readResult = result->getPoint();
-  if (!isPointerLike(readResult.getType())) {
-    return;
-  }
+  assert(relative && "only valid to create implicit argument dereferences when "
+                     "operating in relative mode");
 
+  Value readResult = result->getPoint();
   auto parent = op->getParentOfType<FunctionOpInterface>();
   assert(parent && "failed to find function parent");
   auto *entryPointsToSets =
@@ -1108,11 +1112,6 @@ void enzyme::AliasAnalysis::createImplicitArgDereference(
   if (!entryPointsToSets->getPointsTo(srcClass).isUndefined()) {
     // Only create the pseudo class if another load hasn't already created the
     // implicitly dereferenced pseudo class.
-
-    // TODO(jacob): might be thinking about this the wrong way. It could be that
-    // pseudo classes should be identified using a different mechanism than
-    // distinct attributes such that two points could be visited that have a
-    // get-or-create mechanism for the implicitly dereferenced pseudo classes.
     return;
   }
   if (auto debugLabel =
